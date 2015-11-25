@@ -2,6 +2,7 @@ import sys
 import socket
 import time
 import select
+import errno
 import logging
 
 logging.basicConfig(
@@ -17,7 +18,7 @@ class Server(object):
 
     def start(self):
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server.setblocking(False)
+        server.setblocking(0)
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server.bind(('', self.port))
         server.listen(10)
@@ -37,7 +38,22 @@ class Server(object):
                     inputs.append(client)
                     logging.info("established connection with %s:%s" % address)
                 else:
-                    data = s.recv(1024)
+                    data = ''
+                    while True:
+                        try:
+                            packet = s.recv(1024)
+                            data += packet
+                            if not packet:
+                                break
+                        except socket.error, e:
+                            err = e.args[0]
+                            if err in [errno.EAGAIN, errno.EWOULDBLOCK]:
+                                logging.debug('no data available')
+                                break
+                            else:
+                                logging.fatal(e)
+                                sys.exit(-1)
+
                     if data:
                         logging.debug("recieved data from [%s]: %s" % 
                                 (s.getpeername(), data))
@@ -82,7 +98,7 @@ class Client(object):
             time.sleep(self.sleep)
 
         logging.info("ping pong is finished")
-        client.shutdown(socket.SHUT_RDWR)
+        client.shutdown(socket.SHUT_RD)
         client.close()
 
 if __name__ == '__main__':
