@@ -23,22 +23,23 @@ class Server(object):
         server.bind(('', self.port))
         server.listen(10)
 
-        inputs, outputs = [server], []
+        epoll_fd = select.epoll()
+        epoll_fd.register(server.fileno(), select.EPOLLIN)
+        conn = {}
+
         while True:
-            readable, writable, exceptional = select.select(inputs, outputs, inputs, self.timeout)
+            epoll_list = epoll_fd.poll()
 
-            if not readable and not writable and not exceptional:
-                logging.info("select time out")
-                continue
-
-            for s in readable:
-                if s == server:
-                    client, address = s.accept()
+            for fd, event in epoll_list:
+                if fd == server.fileno():
+                    client, address = server.accept()
                     client.setblocking(0)
-                    inputs.append(client)
-                    logging.info("established connection with %s:%s" % address)
-                else:
+                    epoll_fd.register(client.fileno(), select.EPOLLIN | select.EPOLLET)
+                    logging.info("established connection with %s:%s" % client.getpeername())
+                    conn[client.fileno()] = client
+                elif event & select.EPOLLIN:
                     data = ''
+                    s = conn[fd]
                     while True:
                         try:
                             packet = s.recv(1024)
@@ -57,31 +58,30 @@ class Server(object):
                     if data:
                         logging.debug("recieved data from [%s]: %s" % 
                                 (s.getpeername(), data))
-                        if s not in outputs:
-                            '''
-                            CAUTIONS:
-                            it might to lead to a mistake if "stick package" happens,
-                            but in our scenario, the packets are too small(4B) to be stick.
-                            LOL
-                            '''
-                            outputs.append(s)
+                        '''
+                        CAUTIONS:
+                        it might to lead to a mistake if "stick package" happens,
+                        but in our scenario, the packets are too small(4B) to be stick.
+                        LOL
+                        '''
+                        epoll_fd.modify(fd, select.EPOLLET | select.EPOLLOUT)
                     else:
-                        if s in outputs:
-                            outputs.remove(s)
-                        inputs.remove(s)
                         logging.info("shutdown connection with %s:%s" % s.getpeername())
+                        epoll_fd.unregister(fd)
                         s.close()
-
-            for s in writable:
-                s.send('pong')
-                outputs.remove(s)
-
-            for s in exceptional:
-                inputs.remove(s)
-                if s in outputs:
-                    outputs.remove(s)
-                s.close()
-                logging.info("shutdown connection with %s" % s.getpeername())
+                        del conn[fd]
+                elif event & select.EPOLLOUT: 
+                    s = conn[fd]
+                    s.send('pong')
+                    epoll_fd.modify(fd, select.EPOLLIN | select.EPOLLET)
+                elif event & select.EPOLLHUP:
+                    s = conn[fd]
+                    logging.info("shutdown connection with %s" % s.getpeername())
+                    epoll_fd.unregister(fd)
+                    s.close()
+                    del conn[fd]
+                else:
+                    pass
         server.close()
 
 class Client(object):
@@ -112,5 +112,6 @@ if __name__ == '__main__':
         s = Server(9000)
         s.start()
     elif sys.argv[1] == 'client':
-        c = Client('127.0.0.1', 9000, loop=1000)
+        c = Client('127.0.0.1', 9000, loop=1000000)
         c.start()
+
