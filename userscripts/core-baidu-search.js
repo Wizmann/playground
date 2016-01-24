@@ -10,7 +10,7 @@
 /* jshint -W097 */
 'use strict';
 
-var white_list_regex = /百度|baidu.com|热线|健康/i;
+var white_list_regex = /百度|baidu/i;
 
 function remove_search_results() {
     var time = new Date();
