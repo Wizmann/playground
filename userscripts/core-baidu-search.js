@@ -10,11 +10,20 @@
 /* jshint -W097 */
 'use strict';
 
+var white_list_regex = /百度|baidu.com|热线|健康/i;
+
 function remove_search_results() {
     var time = new Date();
     console.log(time.getHours() + ":" + time.getMinutes() + ":" + time.getSeconds());
     console.log("removing search results...");
-    $("div.result, div.c-container").remove();
+    
+    var $suspicious = $("div.result, div.c-container");
+    $.each($suspicious, function(i, node) {
+        var $node = $(node);
+        if (!white_list_regex.test($node.children('h3.t').text())) {
+            $node.remove();
+        }
+    });
 }
 
 $(window).bind("load hashchange", remove_search_results);
