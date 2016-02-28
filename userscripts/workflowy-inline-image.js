@@ -10,7 +10,6 @@
 'use strict';
 
 
-
 function do_parseImg() {
     $(this).nextAll(".content-img").remove();
     var lines = $(this).text().split("\n");
@@ -46,8 +45,8 @@ function parseImg() {
 
 $(window).bind("load hashchange", parseImg);
 
-    $(".img-toggle").live("click", function() {
-        console.log("toggle");
-        $(this).toggle();
-    });
+$(".img-toggle").live("click", function() {
+    console.log("toggle");
+    $(this).toggle();
+});
 
